@@ -14,3 +14,6 @@ build/
 evidence/
 
 node_modules/
+
+# Private decision log (kept on the laptop only)
+decision-log.md
