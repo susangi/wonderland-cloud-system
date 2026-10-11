@@ -1,0 +1,28 @@
+# Local development stack.
+# For now only MySQL runs in Docker. The Laravel services run with "php artisan serve"
+# (see docs/05-local-development.md). The full container stack (services + gateway) is added in Phase 6.
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: wonderland-mysql
+    environment:
+      # Local only password. Cloud passwords come from Secrets Manager, never from this file.
+      MYSQL_ROOT_PASSWORD: root
+      # Store times in UTC, same as RDS. The frontend and Metabase show Asia/Colombo time.
+      TZ: UTC
+    ports:
+      # XAMPP MySQL already uses 3306 on the laptop, so Docker MySQL uses 3307.
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # Creates the six schemas the first time the volume is empty.
+      - ./scripts/local-db-init.sql:/docker-entrypoint-initdb.d/01-local-db-init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql-data:
