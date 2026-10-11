@@ -28,37 +28,40 @@ docker-compose.yml   local MySQL
 
 ## Run locally (Windows)
 
-Prerequisites: PHP 8.2, Composer 2, Docker Desktop, Node.js LTS.
+Prerequisites: PHP 8.2, Composer 2, Docker Desktop, Node.js LTS. Only MySQL runs in Docker
+(port **3307**, because XAMPP MySQL uses 3306). Details: `docs/05-local-development.md`.
 
-1. Start MySQL (port **3307**, because XAMPP MySQL uses 3306):
-
-   ```
-   docker compose up -d mysql
-   ```
-
-   The first start runs `scripts/local-db-init.sql`, which creates the schemas
-   `attraction_db`, `pricing_db`, `booking_db`, `payment_db`, `event_db` and `metabase_db`.
-
-2. Check the schemas:
+1. One time setup (starts MySQL, installs packages, creates `.env` files, runs migrations and seeders):
 
    ```
-   docker exec wonderland-mysql mysql -uroot -proot -e "SHOW DATABASES;"
+   scripts\dev-setup.bat
    ```
 
-3. Run each service with `php artisan serve` on its own port and the frontend with `npm run dev`:
+2. Start everything (one window per service, the booking scheduler and the frontend):
 
-   | Component | URL |
-   |---|---|
-   | attraction-service | http://127.0.0.1:8001 |
-   | pricing-service | http://127.0.0.1:8002 |
-   | booking-service | http://127.0.0.1:8003 |
-   | payment-service | http://127.0.0.1:8004 |
-   | event-service | http://127.0.0.1:8005 |
-   | frontend | http://localhost:5173 |
+   ```
+   scripts\dev-start.bat
+   ```
 
-   The one click scripts `scripts\dev-setup.bat` and `scripts\dev-start.bat` will be added together with the services.
+3. Optional sample data for the admin dashboard (marked `source = simulated`):
 
-To reset the local database completely: `docker compose down -v`, then `docker compose up -d mysql`.
+   ```
+   scripts\dev-sample-data.bat
+   ```
+
+| Component | URL |
+|---|---|
+| attraction-service | http://127.0.0.1:8001 |
+| pricing-service | http://127.0.0.1:8002 |
+| booking-service | http://127.0.0.1:8003 |
+| payment-service | http://127.0.0.1:8004 |
+| event-service | http://127.0.0.1:8005 |
+| frontend | http://localhost:5173 |
+
+Each service has `/up` (probes) and `/api/health`. Run the tests of a service with `php artisan test` inside its folder.
+
+Check the schemas: `docker exec wonderland-mysql mysql -uroot -proot -e "SHOW DATABASES;"`.
+To reset the local database completely: `docker compose down -v`, then `scripts\dev-setup.bat` again.
 
 ## Secrets
 

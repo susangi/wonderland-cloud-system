@@ -1,0 +1,4 @@
+# Windows batch files need CRLF line endings, or cmd.exe can misread labels.
+*.bat text eol=crlf
+# Shell scripts run in Git Bash and Linux, so keep LF.
+*.sh text eol=lf
