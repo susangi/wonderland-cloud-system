@@ -1,3 +1,16 @@
 /design/**
 /docs/**
 CLAUDE.md
+
+# Rendered Kubernetes files and other build output
+build/
+
+# Local secrets. Only .env.example files are committed.
+.env
+.env.*
+!.env.example
+
+# Screenshots and outputs collected for the report
+evidence/
+
+node_modules/
