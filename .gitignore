@@ -20,3 +20,6 @@ decision-log.md
 
 # Frontend build output
 dist/
+
+# Original full size photos (local backup). The app uses the smaller .webp copies.
+frontend/src/assets/images/original/

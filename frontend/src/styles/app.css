@@ -182,3 +182,20 @@ dialog.wl-dialog::backdrop { background: var(--navy-900); opacity: .55; }
 
 /* A closed <dialog> must stay hidden. The design class sets display:flex, which would show it on page load. */
 dialog.wl-dialog:not([open]) { display: none; }
+
+/* Photos (AttractionCard guide: real photos go in the 120px art band; they cover the circles). */
+.wl-attraction__photo { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; max-width: none; object-fit: cover; object-position: center 40%; }
+
+/* Hero with photo (Hero guide: photo in the right half, text stays on navy). */
+.wl-hero--photo .wl-hero__photo { display: block; width: calc(100% + 2 * var(--space-5)); max-width: none; height: 200px; object-fit: cover; margin: calc(-1 * var(--space-7)) calc(-1 * var(--space-5)) var(--space-5); }
+.wl-hero--photo .wl-hero__shapes { display: none; }
+@media (min-width: 768px) {
+  .wl-hero--photo .wl-hero__photo { width: calc(100% + 2 * var(--space-7)); height: 260px; margin: calc(-1 * var(--space-8)) calc(-1 * var(--space-7)) var(--space-6); }
+}
+@media (min-width: 1024px) {
+  .wl-hero--photo { min-height: 440px; }
+  .wl-hero--photo .wl-hero__photo { position: absolute; z-index: 0; top: 0; right: 0; bottom: 0; width: 46%; height: 100%; margin: 0; }
+  .wl-hero--photo > :not(.wl-hero__photo):not(.wl-hero__shapes) { max-width: 50%; }
+  /* Small brand circles where the photo meets the navy. */
+  .wl-hero--photo .wl-hero__shapes { display: block; z-index: 1; width: 160px; height: 160px; top: auto; bottom: -50px; right: calc(46% - 80px); }
+}
