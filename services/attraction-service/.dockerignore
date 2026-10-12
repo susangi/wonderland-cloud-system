@@ -10,3 +10,7 @@ tests
 storage/logs/*
 .phpunit.result.cache
 .git
+
+# Laravel cache files made on the laptop list dev packages too.
+# Leave them out, so Laravel builds fresh ones inside the container.
+bootstrap/cache/*.php
