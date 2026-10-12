@@ -1,0 +1,201 @@
+/* ==========================================================================
+   Page layout pieces that the design system bundle does not include
+   (footer, page title rows, booking layout, side panel ...).
+   Only design tokens (var(--...)) are used here, never raw colour values.
+   ========================================================================== */
+
+/* Skip link: first thing keyboard users reach on every page. */
+.wl-skip-link {
+  position: absolute; left: var(--space-4); top: -100px; z-index: 100;
+  background: var(--surface-card); color: var(--navy-900); padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-md); font-weight: 600;
+}
+.wl-skip-link:focus { top: var(--space-2); }
+
+/* Visitor pages */
+.wl-app { min-height: 100vh; display: flex; flex-direction: column; }
+.wl-page { flex: 1; padding-top: var(--space-6); padding-bottom: var(--space-7); }
+.wl-page > .wl-stack { gap: var(--space-6); }
+.wl-page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+@media (max-width: 639px) {
+  .wl-page-head > .wl-btn { width: 100%; }
+}
+.wl-section { display: flex; flex-direction: column; gap: var(--space-4); }
+.wl-footer { background: var(--navy-900); color: var(--ink-on-dark-muted); padding: var(--space-5) 0; font-size: 14px; }
+.wl-footer .wl-container { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); }
+.wl-footer a { color: var(--ink-on-dark); margin-left: var(--space-4); }
+.wl-center { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-7) 0; text-align: center; }
+
+/* Mobile drawer under the top bar */
+@media (min-width: 768px) { .wl-drawer { display: none; } }
+.wl-drawer button { text-align: left; background: none; border: 0; padding: 14px 4px; font: inherit; font-weight: 600; color: var(--ink-on-dark); cursor: pointer; }
+
+/* Home */
+.wl-tier-row { display: grid; gap: var(--space-4); grid-template-columns: repeat(4, minmax(0, 1fr)); padding-top: var(--space-3); }
+.wl-tier-row a { text-decoration: none; color: inherit; }
+@media (max-width: 1023px) {
+  .wl-tier-row { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: var(--space-2); }
+  .wl-tier-row > * { flex: 0 0 260px; scroll-snap-align: start; }
+}
+
+/* Attractions filter bar */
+.wl-filter-bar { background: var(--surface-sunken); border-radius: var(--radius-lg); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+.wl-filter-bar__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.wl-filter-toggle { display: none; }
+@media (max-width: 639px) {
+  .wl-filter-toggle { display: inline-flex; }
+  .wl-filter-bar.is-collapsed .wl-filter-bar__rows { display: none; }
+}
+.wl-filter-bar__rows { display: flex; flex-direction: column; gap: var(--space-3); }
+
+/* Booking flow: step content left, sticky summary right */
+.wl-booking-layout { display: grid; gap: var(--space-6); grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 768px) {
+  .wl-booking-layout.has-summary { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+  .wl-booking-layout .wl-summary-card { position: sticky; top: 88px; }
+}
+.wl-tier-grid { display: grid; gap: var(--space-4); grid-template-columns: 1fr; padding-top: var(--space-3); }
+@media (min-width: 768px) { .wl-tier-grid { grid-template-columns: 1fr 1fr; } }
+.wl-date-time { display: grid; gap: var(--space-5); grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 1024px) { .wl-date-time { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.wl-step-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--border-subtle); }
+.wl-step-footer__summary { display: none; font-weight: 700; }
+@media (max-width: 767px) {
+  .wl-step-footer { position: sticky; bottom: 0; background: var(--surface-card); box-shadow: var(--shadow-lg); margin: 0 calc(-1 * var(--space-4)); padding: var(--space-3) var(--space-4); border-top: 0; z-index: 10; }
+  .wl-step-footer__summary { display: block; }
+}
+.wl-pay-form { max-width: var(--form-max); }
+
+/* Ticket page */
+.wl-ticket-layout { display: grid; gap: var(--space-6); grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 1024px) { .wl-ticket-layout { grid-template-columns: 420px minmax(0, 1fr); } }
+.wl-ticket__qr-box.wl-ticket__qr-box { display: grid; place-items: center; }
+
+/* My visits */
+.wl-visits-layout { display: grid; gap: var(--space-6); grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 1024px) { .wl-visits-layout { grid-template-columns: minmax(0, var(--form-max)) minmax(0, 1fr); } }
+.wl-stats { display: grid; gap: var(--space-3); grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (min-width: 1024px) { .wl-stats { grid-template-columns: 1fr; } }
+.wl-stats .wl-kpi__value { font-size: 24px; line-height: 30px; }
+
+/* Admin */
+.wl-admin__main { padding: var(--space-6); min-width: 0; }
+@media (max-width: 1023px) { .wl-admin__main { padding: var(--space-4) var(--space-4) 80px; } }
+.wl-admin__main > .wl-stack { gap: var(--space-5); }
+.wl-sidebar__foot { margin-top: auto; font-size: 13px; color: var(--ink-on-dark-muted); display: flex; flex-direction: column; gap: var(--space-2); overflow-wrap: anywhere; }
+.wl-sidebar__foot a, .wl-sidebar__foot button { color: var(--ink-on-dark); background: none; border: 0; padding: 0; font: inherit; text-align: left; cursor: pointer; text-decoration: underline; }
+.wl-kpis { display: grid; gap: var(--space-4); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 1024px) { .wl-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.wl-kpis .wl-kpi__value { overflow-wrap: anywhere; }
+.wl-charts { display: grid; gap: var(--space-5); grid-template-columns: 1fr; }
+@media (min-width: 1024px) {
+  .wl-charts { grid-template-columns: 1fr 1fr; }
+  .wl-charts .is-wide { grid-column: 1 / -1; }
+}
+.wl-range { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); }
+.wl-range .wl-field { width: 160px; }
+.wl-table-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.wl-table-tools .wl-field { width: 100%; max-width: 320px; }
+.wl-row-saved { font-size: 13px; font-weight: 600; color: var(--success-ink); }
+.wl-row-error { font-size: 13px; font-weight: 600; color: var(--danger-ink); }
+.wl-table tr.is-dirty { background: var(--teal-50); }
+.wl-table td .wl-field { min-width: 80px; }
+
+/* Side panel for create / edit attraction (full page on phones) */
+.wl-panel-backdrop { position: fixed; inset: 0; z-index: 40; background: var(--navy-900); opacity: .4; }
+.wl-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 45; width: 100%; max-width: 480px; overflow-y: auto;
+  background: var(--surface-card); box-shadow: var(--shadow-lg); padding: var(--space-5);
+}
+
+/* Gate check-in and ride scan */
+.wl-scan-layout { display: grid; gap: var(--space-5); grid-template-columns: 1fr; align-items: start; }
+.wl-scan-layout > .wl-stack { max-width: var(--form-max); width: 100%; }
+@media (min-width: 1024px) { .wl-scan-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.wl-scan-first { order: -1; }
+@media (min-width: 1024px) { .wl-scan-first { order: 2; } }
+.wl-scanner__video { position: absolute; inset: 0; }
+.wl-scanner__video video { width: 100% !important; height: 100% !important; object-fit: cover; }
+.wl-scanner__video img, .wl-scanner__video #qr-shaded-region { display: none !important; }
+.wl-recent { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.wl-recent li { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-top: 1px solid var(--border-subtle); font-size: 14px; }
+.wl-recent li:first-child { border-top: 0; }
+.wl-input--lg { min-height: var(--control-height-lg); font-size: 18px; }
+
+/* Login card */
+.wl-auth { max-width: var(--form-max); margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: var(--space-5); }
+.wl-auth > .wl-card { width: 100%; }
+@media (max-width: 639px) { .wl-auth > .wl-card { border: 0; box-shadow: none; padding: var(--space-4); } }
+
+/* Amplify Authenticator restyled with Wonderland tokens (design 13.3a). */
+[data-amplify-authenticator] {
+  --amplify-fonts-default-variable: var(--font-sans);
+  --amplify-fonts-default-static: var(--font-sans);
+  --amplify-colors-font-primary: var(--navy-900);
+  --amplify-colors-font-secondary: var(--ink-muted);
+  --amplify-colors-font-interactive: var(--teal-600);
+  --amplify-colors-font-hover: var(--teal-700);
+  --amplify-colors-brand-primary-10: var(--teal-50);
+  --amplify-colors-brand-primary-20: var(--teal-100);
+  --amplify-colors-brand-primary-40: var(--teal-600);
+  --amplify-colors-brand-primary-60: var(--teal-600);
+  --amplify-colors-brand-primary-80: var(--teal-600);
+  --amplify-colors-brand-primary-90: var(--teal-700);
+  --amplify-colors-brand-primary-100: var(--teal-700);
+  --amplify-components-button-primary-background-color: var(--teal-600);
+  --amplify-components-button-primary-hover-background-color: var(--teal-700);
+  --amplify-components-button-primary-focus-background-color: var(--teal-700);
+  --amplify-components-button-primary-active-background-color: var(--teal-700);
+  --amplify-components-button-link-color: var(--teal-600);
+  --amplify-components-button-link-hover-color: var(--teal-700);
+  --amplify-components-button-link-hover-background-color: var(--teal-100);
+  --amplify-colors-border-primary: var(--border-strong);
+  --amplify-colors-border-focus: var(--teal-600);
+  --amplify-components-authenticator-router-border-width: 0;
+  --amplify-components-authenticator-router-box-shadow: none;
+  --amplify-components-authenticator-container-width-max: 100%;
+  --amplify-components-button-border-radius: var(--radius-md);
+  --amplify-components-fieldcontrol-border-radius: var(--radius-md);
+  --amplify-components-fieldcontrol-border-width: 1.5px;
+  --amplify-components-tabs-item-active-color: var(--navy-900);
+  --amplify-components-tabs-item-active-border-color: var(--coral-500);
+  --amplify-components-tabs-item-color: var(--ink-muted);
+}
+[data-amplify-authenticator] [data-amplify-router] { background: transparent; }
+[data-amplify-authenticator] .amplify-button--primary { font-weight: 600; min-height: var(--control-height); }
+[data-amplify-authenticator] .amplify-input { font-size: 16px; min-height: var(--control-height); }
+
+/* Native <dialog> (Dialog.jsx): dim the page behind it with the navy token. */
+dialog.wl-dialog { margin: auto; }
+dialog.wl-dialog::backdrop { background: var(--navy-900); opacity: .55; }
+
+/* The Log in CTA sits inside the nav links, whose colour rules would turn its text pale.
+   Coral buttons always use navy text (design README "Colour"). */
+.wl-topnav__links a.wl-btn--cta,
+.wl-topnav__links a.wl-btn--cta:hover { color: var(--navy-900); background: var(--_bg); border-radius: var(--radius-md); box-shadow: none; }
+
+/* Hero text always stays above the circles. On phones the circles move further into the corner. */
+.wl-hero > :not(.wl-hero__shapes) { position: relative; z-index: 1; }
+@media (max-width: 639px) {
+  .wl-hero__shapes { width: 200px; height: 200px; right: -110px; top: -100px; }
+}
+
+/* A closed <dialog> must stay hidden. The design class sets display:flex, which would show it on page load. */
+dialog.wl-dialog:not([open]) { display: none; }
+
+/* Photos (AttractionCard guide: real photos go in the 120px art band; they cover the circles). */
+.wl-attraction__photo { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; max-width: none; object-fit: cover; object-position: center 40%; }
+
+/* Hero with photo (Hero guide: photo in the right half, text stays on navy). */
+.wl-hero--photo .wl-hero__photo { display: block; width: calc(100% + 2 * var(--space-5)); max-width: none; height: 200px; object-fit: cover; margin: calc(-1 * var(--space-7)) calc(-1 * var(--space-5)) var(--space-5); }
+.wl-hero--photo .wl-hero__shapes { display: none; }
+@media (min-width: 768px) {
+  .wl-hero--photo .wl-hero__photo { width: calc(100% + 2 * var(--space-7)); height: 260px; margin: calc(-1 * var(--space-8)) calc(-1 * var(--space-7)) var(--space-6); }
+}
+@media (min-width: 1024px) {
+  .wl-hero--photo { min-height: 440px; }
+  .wl-hero--photo .wl-hero__photo { position: absolute; z-index: 0; top: 0; right: 0; bottom: 0; width: 46%; height: 100%; margin: 0; }
+  .wl-hero--photo > :not(.wl-hero__photo):not(.wl-hero__shapes) { max-width: 50%; }
+  /* Small brand circles where the photo meets the navy. */
+  .wl-hero--photo .wl-hero__shapes { display: block; z-index: 1; width: 160px; height: 160px; top: auto; bottom: -50px; right: calc(46% - 80px); }
+}
