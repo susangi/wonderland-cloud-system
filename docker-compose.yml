@@ -6,6 +6,9 @@ services:
   mysql:
     image: mysql:8.4
     container_name: wonderland-mysql
+    # Metabase's driver cannot use MySQL 8's default password method without SSL,
+    # so we allow the older method for the read only Metabase user only (local).
+    command: --mysql-native-password=ON
     environment:
       # Local only password. Cloud passwords come from Secrets Manager, never from this file.
       MYSQL_ROOT_PASSWORD: root
@@ -23,6 +26,23 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-
+  metabase:
+    # Metabase reads park data for the admin dashboards (FR-A-12, TR-04).
+    # Exact version pinned so the demo does not change by itself.
+    image: metabase/metabase:v0.61.7
+    container_name: wonderland-metabase
+    ports:
+      - "3000:3000"
+    environment:
+      # Metabase keeps its own dashboards in metabase_db, so they survive a restart.
+      MB_DB_TYPE: mysql
+      MB_DB_HOST: mysql
+      MB_DB_PORT: 3306
+      MB_DB_DBNAME: metabase_db
+      MB_DB_USER: root
+      MB_DB_PASS: root
+    depends_on:
+      mysql:
+        condition: service_healthy
 volumes:
   mysql-data:
