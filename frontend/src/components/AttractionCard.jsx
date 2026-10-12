@@ -1,12 +1,18 @@
 import { Ruler, User } from 'lucide-react';
 import ThrillMeter from './ThrillMeter';
 import { categoryLabel } from '../utils/status';
+import { attractionPhoto } from '../utils/attractionPhotos';
 
 // One ride or activity (design/components/AttractionCard). No "Book" button: rides are not booked one by one.
+// The art band shows a photo when we have one, otherwise the coloured circles.
 export default function AttractionCard({ attraction }) {
+  const photo = attractionPhoto(attraction.name);
+
   return (
     <article className="wl-card wl-attraction">
-      <div className="wl-attraction__art" data-category={attraction.category} aria-hidden="true" />
+      <div className="wl-attraction__art" data-category={attraction.category} aria-hidden="true">
+        {photo && <img className="wl-attraction__photo" src={photo} alt="" loading="lazy" />}
+      </div>
       <div className="wl-attraction__body">
         <div className="wl-attraction__head">
           <h3 className="wl-attraction__title">{attraction.name}</h3>
