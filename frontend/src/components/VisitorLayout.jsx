@@ -12,7 +12,7 @@ export default function VisitorLayout() {
       </main>
       <footer className="wl-footer wl-on-dark wl-no-print">
         <div className="wl-container">
-          <span>© Wonderland — a fictional park for a university project</span>
+          <span>© Wonderland</span>
           <span>
             <Link to="/attractions">Attractions</Link>
             <Link to="/book">Book</Link>
