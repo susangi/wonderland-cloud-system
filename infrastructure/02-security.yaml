@@ -1,0 +1,177 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Wonderland stack 2 - security groups and generated secrets
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: wonderland
+
+Resources:
+  # ---------- Security groups (firewalls) ----------
+
+  # MySQL can be reached only from inside the VPC (EKS pods, Metabase, Jobs).
+  # Nothing on the internet can reach the database.
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: MySQL access only from inside the Wonderland VPC
+      VpcId:
+        Fn::ImportValue: !Sub ${ProjectName}-VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp:
+            Fn::ImportValue: !Sub ${ProjectName}-VpcCidr
+          Description: MySQL from inside the VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-rds-sg
+
+  # Used by the API Gateway VPC link to send requests to the internal load balancer.
+  VpcLinkSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: API Gateway VPC link to the internal load balancer
+      VpcId:
+        Fn::ImportValue: !Sub ${ProjectName}-VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-vpclink-sg
+
+  # ---------- Secrets (AWS makes random values, nothing is typed by hand) ----------
+  # No fixed names, so destroy and deploy again works even while old secrets wait for deletion.
+
+  DbMasterSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: RDS master user, used only to create the per service users
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "wl_admin"}'
+        GenerateStringKey: password
+        PasswordLength: 24
+        ExcludePunctuation: true
+
+  # One MySQL user per service. Each user can use only its own schema (least privilege).
+  AttractionDbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: attraction-service MySQL user
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "attraction_user"}'
+        GenerateStringKey: password
+        PasswordLength: 24
+        ExcludePunctuation: true
+
+  PricingDbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: pricing-service MySQL user
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "pricing_user"}'
+        GenerateStringKey: password
+        PasswordLength: 24
+        ExcludePunctuation: true
+
+  BookingDbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: booking-service MySQL user
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "booking_user"}'
+        GenerateStringKey: password
+        PasswordLength: 24
+        ExcludePunctuation: true
+
+  PaymentDbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: payment-service MySQL user
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "payment_user"}'
+        GenerateStringKey: password
+        PasswordLength: 24
+        ExcludePunctuation: true
+
+  EventDbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: event-service MySQL user
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "event_user"}'
+        GenerateStringKey: password
+        PasswordLength: 24
+        ExcludePunctuation: true
+
+  # Metabase keeps its own dashboards in metabase_db.
+  MetabaseAppDbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Metabase application database user (metabase_db)
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "metabase_app"}'
+        GenerateStringKey: password
+        PasswordLength: 24
+        ExcludePunctuation: true
+
+  # Metabase reads park data with a read only user.
+  MetabaseReadOnlySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Read only user for Metabase dashboards (event_db, booking_db)
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "metabase_ro"}'
+        GenerateStringKey: password
+        PasswordLength: 24
+        ExcludePunctuation: true
+
+  # Shared token for service to service calls (X-Internal-Token header).
+  InternalTokenSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Token for internal service to service calls
+      GenerateSecretString:
+        PasswordLength: 40
+        ExcludePunctuation: true
+
+  # Laravel APP_KEY. A 32 character key works for AES-256. The services are stateless JSON APIs,
+  # so one shared key is enough for this assignment.
+  AppKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Laravel APP_KEY for the services
+      GenerateSecretString:
+        PasswordLength: 32
+        ExcludePunctuation: true
+
+Outputs:
+  RdsSecurityGroupId:
+    Value: !Ref RdsSecurityGroup
+    Export:
+      Name: !Sub ${ProjectName}-RdsSecurityGroupId
+  VpcLinkSecurityGroupId:
+    Value: !Ref VpcLinkSecurityGroup
+    Export:
+      Name: !Sub ${ProjectName}-VpcLinkSecurityGroupId
+  DbMasterSecretArn:
+    Value: !Ref DbMasterSecret
+    Export:
+      Name: !Sub ${ProjectName}-DbMasterSecretArn
+  AttractionDbSecretArn:
+    Value: !Ref AttractionDbSecret
+  PricingDbSecretArn:
+    Value: !Ref PricingDbSecret
+  BookingDbSecretArn:
+    Value: !Ref BookingDbSecret
+  PaymentDbSecretArn:
+    Value: !Ref PaymentDbSecret
+  EventDbSecretArn:
+    Value: !Ref EventDbSecret
+  MetabaseAppDbSecretArn:
+    Value: !Ref MetabaseAppDbSecret
+  MetabaseReadOnlySecretArn:
+    Value: !Ref MetabaseReadOnlySecret
+  InternalTokenSecretArn:
+    Value: !Ref InternalTokenSecret
+  AppKeySecretArn:
+    Value: !Ref AppKeySecret
