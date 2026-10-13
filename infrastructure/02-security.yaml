@@ -42,16 +42,6 @@ Resources:
   # ---------- Secrets (AWS makes random values, nothing is typed by hand) ----------
   # No fixed names, so destroy and deploy again works even while old secrets wait for deletion.
 
-  DbMasterSecret:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Description: RDS master user, used only to create the per service users
-      GenerateSecretString:
-        SecretStringTemplate: '{"username": "wl_admin"}'
-        GenerateStringKey: password
-        PasswordLength: 24
-        ExcludePunctuation: true
-
   # One MySQL user per service. Each user can use only its own schema (least privilege).
   AttractionDbSecret:
     Type: AWS::SecretsManager::Secret
@@ -153,10 +143,6 @@ Outputs:
     Value: !Ref VpcLinkSecurityGroup
     Export:
       Name: !Sub ${ProjectName}-VpcLinkSecurityGroupId
-  DbMasterSecretArn:
-    Value: !Ref DbMasterSecret
-    Export:
-      Name: !Sub ${ProjectName}-DbMasterSecretArn
   AttractionDbSecretArn:
     Value: !Ref AttractionDbSecret
   PricingDbSecretArn:
