@@ -1,6 +1,14 @@
-# Local development stack.
-# For now only MySQL runs in Docker. The Laravel services run with "php artisan serve"
-# (see docs/05-local-development.md). The full container stack (services + gateway) is added in Phase 6.
+# Local container stack for Wonderland (Phase 6).
+# MySQL, Metabase and the five Laravel microservices run as containers.
+# The React frontend still runs with "npm run dev" and its Vite proxy sends /api calls to ports 8001-8005.
+
+# Settings shared by all five Laravel containers.
+# Each service still reads its own .env (APP_KEY, DB name), these lines override
+# only what is different inside Docker.
+x-laravel-env: &laravel-env
+  DB_HOST: mysql
+  DB_PORT: "3306"
+  LOG_CHANNEL: stderr
 
 services:
   mysql:
@@ -26,6 +34,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
   metabase:
     # Metabase reads park data for the admin dashboards (FR-A-12, TR-04).
     # Exact version pinned so the demo does not change by itself.
@@ -44,5 +53,91 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+
+  attraction-service:
+    build: ./services/attraction-service
+    image: wonderland/attraction-service:local
+    container_name: wonderland-attraction
+    env_file: ./services/attraction-service/.env
+    environment:
+      <<: *laravel-env
+    ports:
+      - "8001:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  pricing-service:
+    build: ./services/pricing-service
+    image: wonderland/pricing-service:local
+    container_name: wonderland-pricing
+    env_file: ./services/pricing-service/.env
+    environment:
+      <<: *laravel-env
+    ports:
+      - "8002:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  booking-service:
+    build: ./services/booking-service
+    image: wonderland/booking-service:local
+    container_name: wonderland-booking
+    env_file: ./services/booking-service/.env
+    environment:
+      <<: *laravel-env
+      # Inside Docker, services find each other by service name (service discovery).
+      PRICING_URL: http://pricing-service:8080
+      PAYMENT_URL: http://payment-service:8080
+      EVENT_URL: http://event-service:8080
+    ports:
+      - "8003:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  # Same booking image, but runs the scheduler (outbox flush, expire bookings).
+  # In Kubernetes these become CronJobs.
+  booking-scheduler:
+    image: wonderland/booking-service:local
+    container_name: wonderland-booking-scheduler
+    env_file: ./services/booking-service/.env
+    environment:
+      <<: *laravel-env
+      PRICING_URL: http://pricing-service:8080
+      PAYMENT_URL: http://payment-service:8080
+      EVENT_URL: http://event-service:8080
+    command: ["php", "artisan", "schedule:work"]
+    depends_on:
+      - booking-service
+
+  payment-service:
+    build: ./services/payment-service
+    image: wonderland/payment-service:local
+    container_name: wonderland-payment
+    env_file: ./services/payment-service/.env
+    environment:
+      <<: *laravel-env
+    ports:
+      - "8004:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  event-service:
+    build: ./services/event-service
+    image: wonderland/event-service:local
+    container_name: wonderland-event
+    env_file: ./services/event-service/.env
+    environment:
+      <<: *laravel-env
+      ATTRACTION_URL: http://attraction-service:8080
+    ports:
+      - "8005:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
 volumes:
   mysql-data:
