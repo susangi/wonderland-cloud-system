@@ -1,0 +1,162 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Wonderland stack 5 - EKS cluster, managed node group and core add-ons
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: wonderland
+  KubernetesVersion:
+    Type: String
+    Default: "1.36"
+    Description: Use a version in standard support (extended support costs extra per hour)
+  NodeInstanceType:
+    Type: String
+    Default: t3.medium
+
+Resources:
+  # ---------- IAM role for the control plane ----------
+  ClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+
+  # Control plane logs are kept for 7 days only, to save cost.
+  # Made here first, so EKS does not make a log group that never expires.
+  ClusterLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/eks/${ProjectName}-eks/cluster
+      RetentionInDays: 7
+
+  # ---------- EKS cluster (the Kubernetes control plane, managed by AWS) ----------
+  Cluster:
+    Type: AWS::EKS::Cluster
+    DependsOn: ClusterLogGroup
+    Properties:
+      # Same name as the kubernetes.io/cluster/... tags on the subnets in stack 1.
+      Name: !Sub ${ProjectName}-eks
+      Version: !Ref KubernetesVersion
+      RoleArn: !GetAtt ClusterRole.Arn
+      ResourcesVpcConfig:
+        SubnetIds: !Split
+          - ","
+          - Fn::ImportValue: !Sub ${ProjectName}-PrivateSubnetIds
+        # kubectl on the laptop and GitHub Actions use the public endpoint (they still need IAM access).
+        # Nodes inside the VPC use the private endpoint.
+        EndpointPublicAccess: true
+        EndpointPrivateAccess: true
+      AccessConfig:
+        AuthenticationMode: API_AND_CONFIG_MAP
+        # The IAM user that runs this stack (wonderland-admin) becomes cluster admin.
+        BootstrapClusterCreatorAdminPermissions: true
+      Logging:
+        ClusterLogging:
+          EnabledTypes:
+            - Type: api
+            - Type: audit
+
+  # ---------- IAM role for the worker nodes ----------
+  NodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        # Pull our images from ECR.
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        # Send container logs and metrics to CloudWatch.
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+
+  # ---------- Worker nodes (EC2 machines where the pods run) ----------
+  # Nodes are in the private subnets, so they are not reachable from the internet.
+  # min 1 / desired 2 / max 3 gives room to scale for peak days while keeping cost low.
+  NodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Properties:
+      ClusterName: !Ref Cluster
+      NodegroupName: !Sub ${ProjectName}-nodes
+      NodeRole: !GetAtt NodeRole.Arn
+      Subnets: !Split
+        - ","
+        - Fn::ImportValue: !Sub ${ProjectName}-PrivateSubnetIds
+      InstanceTypes:
+        - !Ref NodeInstanceType
+      AmiType: AL2023_x86_64_STANDARD
+      CapacityType: ON_DEMAND
+      DiskSize: 20
+      ScalingConfig:
+        MinSize: 1
+        DesiredSize: 2
+        MaxSize: 3
+      UpdateConfig:
+        MaxUnavailable: 1
+
+  # ---------- Core add-ons managed by EKS ----------
+  # vpc-cni gives every pod an IP address from the VPC.
+  VpcCniAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref Cluster
+      AddonName: vpc-cni
+      ResolveConflicts: OVERWRITE
+
+  # kube-proxy makes Kubernetes Services work on every node.
+  KubeProxyAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref Cluster
+      AddonName: kube-proxy
+      ResolveConflicts: OVERWRITE
+
+  # coredns is the cluster DNS. It lets booking-service call http://payment-service (service discovery).
+  # It needs nodes to run on, so it waits for the node group.
+  CoreDnsAddon:
+    Type: AWS::EKS::Addon
+    DependsOn: NodeGroup
+    Properties:
+      ClusterName: !Ref Cluster
+      AddonName: coredns
+      ResolveConflicts: OVERWRITE
+
+  # The internal load balancer (made later by ingress-nginx) sends API Gateway traffic
+  # to the nodes on NodePorts. Allow that only from inside the VPC.
+  NodePortIngressFromVpc:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Cluster.ClusterSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 30000
+      ToPort: 32767
+      CidrIp:
+        Fn::ImportValue: !Sub ${ProjectName}-VpcCidr
+      Description: NodePorts from the internal load balancer inside the VPC
+
+Outputs:
+  ClusterName:
+    Value: !Ref Cluster
+    Export:
+      Name: !Sub ${ProjectName}-ClusterName
+  ClusterEndpoint:
+    Value: !GetAtt Cluster.Endpoint
+  ClusterSecurityGroupId:
+    Value: !GetAtt Cluster.ClusterSecurityGroupId
+    Export:
+      Name: !Sub ${ProjectName}-ClusterSecurityGroupId
+  NodeRoleArn:
+    Value: !GetAtt NodeRole.Arn

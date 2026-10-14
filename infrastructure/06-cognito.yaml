@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Wonderland stack 6 - Cognito user pool, web app client and admins group
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: wonderland
+    Description: Prefix for resource names
+
+Resources:
+  # The user pool keeps visitor and staff accounts (email, password).
+  # Our databases only keep the Cognito user id (sub), not personal details.
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub ${ProjectName}-users
+      # People sign in with their email address.
+      UsernameAttributes:
+        - email
+      # Cognito sends a code to confirm the email at sign up.
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+      # Visitors can sign up by themselves. Admins are added to the admins group by an operator.
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      # Off for the assignment, so destroy.sh can remove the stack.
+      DeletionProtection: INACTIVE
+
+  # The React app uses this client. A browser app cannot keep a secret, so no client secret.
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub ${ProjectName}-web
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      # SRP sends a proof of the password, not the password itself.
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      # Do not tell attackers whether an email is registered.
+      PreventUserExistenceErrors: ENABLED
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+
+  # Park staff go in this group. The services return 403 for admin APIs if the token does not have it.
+  AdminsGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: admins
+      UserPoolId: !Ref UserPool
+      Description: Park staff - admin portal, gate check-in and ride scan
+
+Outputs:
+  UserPoolId:
+    Value: !Ref UserPool
+    Export:
+      Name: !Sub ${ProjectName}-UserPoolId
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+    Export:
+      Name: !Sub ${ProjectName}-UserPoolClientId
+  UserPoolIssuer:
+    Description: Used later by the API Gateway JWT authorizer
+    Value: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
+    Export:
+      Name: !Sub ${ProjectName}-UserPoolIssuer

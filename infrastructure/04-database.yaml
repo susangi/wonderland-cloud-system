@@ -1,0 +1,74 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Wonderland stack 4 - RDS MySQL 8.4 in private subnets (one instance, one schema per service)
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: wonderland
+  DbInstanceClass:
+    Type: String
+    Default: db.t4g.micro
+  MultiAz:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Use true in production for a standby copy in a second AZ. false keeps the demo cheap.
+
+Resources:
+  # The database can only be placed in the private subnets from stack 1.
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private subnets for the Wonderland database
+      SubnetIds: !Split
+        - ","
+        - Fn::ImportValue: !Sub ${ProjectName}-PrivateSubnetIds
+
+  # One MySQL instance with one schema per service. Cheaper than five instances,
+  # and each service still has its own schema and its own MySQL user.
+  DbInstance:
+    Type: AWS::RDS::DBInstance
+    # Do not keep a final snapshot when the stack is deleted (saves storage cost for the demo).
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      DBInstanceIdentifier: !Sub ${ProjectName}-mysql
+      Engine: mysql
+      EngineVersion: "8.4"
+      DBInstanceClass: !Ref DbInstanceClass
+      AllocatedStorage: "20"
+      StorageType: gp3
+      # Data at rest is encrypted with an AWS managed key (NFR-SE-06).
+      StorageEncrypted: true
+      MasterUsername: wl_admin
+      # RDS makes the master password and keeps it in Secrets Manager. Nobody types it.
+      ManageMasterUserPassword: true
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups:
+        - Fn::ImportValue: !Sub ${ProjectName}-RdsSecurityGroupId
+      # No public IP. Only resources inside the VPC can connect.
+      PubliclyAccessible: false
+      MultiAZ: !Ref MultiAz
+      BackupRetentionPeriod: 1
+      DeleteAutomatedBackups: true
+      DeletionProtection: false
+      AutoMinorVersionUpgrade: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-mysql
+
+Outputs:
+  DbEndpoint:
+    Description: Host name the services use as DB_HOST
+    Value: !GetAtt DbInstance.Endpoint.Address
+    Export:
+      Name: !Sub ${ProjectName}-DbEndpoint
+  DbPort:
+    Value: !GetAtt DbInstance.Endpoint.Port
+    Export:
+      Name: !Sub ${ProjectName}-DbPort
+  DbMasterSecretArn:
+    Description: Secret made by RDS with the master user name and password
+    Value: !GetAtt DbInstance.MasterUserSecret.SecretArn
+    Export:
+      Name: !Sub ${ProjectName}-DbMasterSecretArn
