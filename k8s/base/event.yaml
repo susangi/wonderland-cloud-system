@@ -1,0 +1,100 @@
+# event-service: Deployment (the pods), Service (stable DNS name) and HPA (autoscaling).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-service
+  labels:
+    app: event-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: event-service
+  # Start the new pod before stopping the old one, so there is no downtime during an update.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: event-service
+    spec:
+      # Same as the Dockerfile: never run as root.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 33
+      containers:
+        - name: app
+          image: wonderland/event-service
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          # Shared settings come from the ConfigMap, passwords and keys come from Secrets.
+          envFrom:
+            - configMapRef:
+                name: wonderland-config
+            - secretRef:
+                name: wonderland-app-secrets
+            - secretRef:
+                name: event-db-secret
+          env:
+            - name: DB_DATABASE
+              value: event_db
+          # Requests are needed for the HPA to calculate CPU %.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+          # Readiness: send traffic only when the app is ready.
+          readinessProbe:
+            httpGet:
+              path: /up
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          # Liveness: restart the container if it stops answering (self healing).
+          livenessProbe:
+            httpGet:
+              path: /up
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 15
+---
+# Other pods call this service at http://event-service (service discovery through Kubernetes DNS).
+apiVersion: v1
+kind: Service
+metadata:
+  name: event-service
+spec:
+  selector:
+    app: event-service
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+# Adds pods when average CPU goes above 60%, removes them when load drops (scalability and cost).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: event-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: event-service
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60

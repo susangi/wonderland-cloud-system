@@ -1,0 +1,45 @@
+# Local Minikube settings. Uses the images built on the laptop and the Docker MySQL on port 3307.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: wonderland
+
+# Take everything from the base folder, then change only what is different for Minikube.
+resources:
+  - ../../base
+
+# Use the images we built with docker build (tag "local").
+images:
+  - name: wonderland/attraction-service
+    newTag: local
+  - name: wonderland/pricing-service
+    newTag: local
+  - name: wonderland/booking-service
+    newTag: local
+  - name: wonderland/payment-service
+    newTag: local
+  - name: wonderland/event-service
+    newTag: local
+
+configMapGenerator:
+  - name: wonderland-config
+    options:
+      disableNameSuffixHash: true
+    literals:
+      - APP_ENV=local
+      - APP_DEBUG=false
+      - LOG_CHANNEL=stderr
+      - SESSION_DRIVER=array
+      - CACHE_STORE=database
+      # The Docker MySQL on the laptop, reached from inside Minikube.
+      - DB_CONNECTION=mysql
+      - DB_HOST=host.minikube.internal
+      - DB_PORT=3307
+      - AUTH_MODE=cognito
+      - COGNITO_REGION=ap-south-1
+      - COGNITO_USER_POOL_ID=ap-south-1_lZqLqBk7i
+      - COGNITO_APP_CLIENT_ID=4826pd4m9baco9r65b7877kckt
+      # Service discovery: Kubernetes Service names instead of laptop ports.
+      - PRICING_URL=http://pricing-service
+      - PAYMENT_URL=http://payment-service
+      - EVENT_URL=http://event-service
+      - ATTRACTION_URL=http://attraction-service

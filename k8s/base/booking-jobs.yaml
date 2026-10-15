@@ -1,0 +1,74 @@
+# Scheduled jobs for booking-service.
+# outbox-flush sends saved ticket events to event-service every minute.
+# expire-pending-bookings cancels unpaid bookings every 5 minutes so seats are released.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: booking-outbox-flush
+spec:
+  schedule: "*/1 * * * *"
+  concurrencyPolicy: Forbid          # do not start a new run while the old one is still running
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsUser: 33
+          containers:
+            - name: outbox-flush
+              image: wonderland/booking-service
+              imagePullPolicy: IfNotPresent
+              command: ["php", "artisan", "outbox:flush"]
+              envFrom:
+                - configMapRef:
+                    name: wonderland-config
+                - secretRef:
+                    name: wonderland-app-secrets
+                - secretRef:
+                    name: booking-db-secret
+              env:
+                - name: DB_DATABASE
+                  value: booking_db
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: 300m, memory: 256Mi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: booking-expire-pending
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsUser: 33
+          containers:
+            - name: expire-pending
+              image: wonderland/booking-service
+              imagePullPolicy: IfNotPresent
+              command: ["php", "artisan", "bookings:expire-pending"]
+              envFrom:
+                - configMapRef:
+                    name: wonderland-config
+                - secretRef:
+                    name: wonderland-app-secrets
+                - secretRef:
+                    name: booking-db-secret
+              env:
+                - name: DB_DATABASE
+                  value: booking_db
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: 300m, memory: 256Mi }
