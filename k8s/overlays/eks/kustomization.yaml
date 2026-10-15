@@ -1,0 +1,52 @@
+# EKS settings. Images come from ECR and the database is RDS.
+# Tokens like __DB_HOST__ are replaced before apply (values are known only after the stacks are deployed).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: wonderland
+
+resources:
+  - ../../base
+  - ingress.yaml
+  - migrate-jobs.yaml
+  - metabase.yaml
+
+images:
+  - name: wonderland/attraction-service
+    newName: __ECR_REGISTRY__/wonderland/attraction-service
+    newTag: __IMAGE_TAG__
+  - name: wonderland/pricing-service
+    newName: __ECR_REGISTRY__/wonderland/pricing-service
+    newTag: __IMAGE_TAG__
+  - name: wonderland/booking-service
+    newName: __ECR_REGISTRY__/wonderland/booking-service
+    newTag: __IMAGE_TAG__
+  - name: wonderland/payment-service
+    newName: __ECR_REGISTRY__/wonderland/payment-service
+    newTag: __IMAGE_TAG__
+  - name: wonderland/event-service
+    newName: __ECR_REGISTRY__/wonderland/event-service
+    newTag: __IMAGE_TAG__
+
+configMapGenerator:
+  - name: wonderland-config
+    options:
+      disableNameSuffixHash: true
+    literals:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - LOG_CHANNEL=stderr
+      - SESSION_DRIVER=array
+      - CACHE_STORE=database
+      # RDS MySQL in the private subnets.
+      - DB_CONNECTION=mysql
+      - DB_HOST=__DB_HOST__
+      - DB_PORT=3306
+      - AUTH_MODE=cognito
+      - COGNITO_REGION=ap-south-1
+      - COGNITO_USER_POOL_ID=ap-south-1_lZqLqBk7i
+      - COGNITO_APP_CLIENT_ID=4826pd4m9baco9r65b7877kckt
+      # Service discovery: Kubernetes Service names.
+      - PRICING_URL=http://pricing-service
+      - PAYMENT_URL=http://payment-service
+      - EVENT_URL=http://event-service
+      - ATTRACTION_URL=http://attraction-service

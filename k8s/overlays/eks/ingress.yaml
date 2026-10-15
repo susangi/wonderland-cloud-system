@@ -1,0 +1,61 @@
+# ingress-nginx routes each /api path to the right service.
+# /api/internal/* is not routed here, so internal endpoints cannot be reached from outside.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: attraction-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - { path: /api/attractions, pathType: Prefix, backend: { service: { name: attraction-service, port: { number: 80 } } } }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pricing-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - { path: /api/tiers, pathType: Prefix, backend: { service: { name: pricing-service, port: { number: 80 } } } }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: booking-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - { path: /api/time-slots, pathType: Prefix, backend: { service: { name: booking-service, port: { number: 80 } } } }
+          - { path: /api/bookings, pathType: Prefix, backend: { service: { name: booking-service, port: { number: 80 } } } }
+          - { path: /api/admin/bookings, pathType: Prefix, backend: { service: { name: booking-service, port: { number: 80 } } } }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: payment-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - { path: /api/payments, pathType: Prefix, backend: { service: { name: payment-service, port: { number: 80 } } } }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: event-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - { path: /api/checkins, pathType: Prefix, backend: { service: { name: event-service, port: { number: 80 } } } }
+          - { path: /api/ride-scans, pathType: Prefix, backend: { service: { name: event-service, port: { number: 80 } } } }
+          - { path: /api/visits, pathType: Prefix, backend: { service: { name: event-service, port: { number: 80 } } } }
+          - { path: /api/analytics, pathType: Prefix, backend: { service: { name: event-service, port: { number: 80 } } } }

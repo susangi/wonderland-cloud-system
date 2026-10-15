@@ -1,0 +1,21 @@
+# PodDisruptionBudget keeps at least 1 pod running during node updates or drains.
+# Booking and event are the critical services, so they get this protection.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: booking-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: booking-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: event-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: event-service

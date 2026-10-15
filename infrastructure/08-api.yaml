@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Wonderland stack 8 - API Gateway HTTP API. Checks the Cognito JWT, then sends the request
+  through a VPC link to the internal NLB created by ingress-nginx.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: wonderland
+  NlbListenerArn:
+    Type: String
+    Description: Port 80 listener ARN of the internal NLB (created by ingress-nginx, so known only after Kubernetes setup)
+  AllowedOrigins:
+    Type: CommaDelimitedList
+    Default: http://localhost:5173
+    Description: Frontend URLs allowed by CORS (local Vite and the Amplify URL)
+
+Resources:
+  # Private connection from API Gateway into our VPC. The NLB is internal, so this is the only way in.
+  VpcLink:
+    Type: AWS::ApiGatewayV2::VpcLink
+    Properties:
+      Name: !Sub ${ProjectName}-vpclink
+      SubnetIds: !Split [",", !ImportValue { "Fn::Sub": "${ProjectName}-PrivateSubnetIds" }]
+      SecurityGroupIds:
+        - !ImportValue { "Fn::Sub": "${ProjectName}-VpcLinkSecurityGroupId" }
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub ${ProjectName}-api
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins: !Ref AllowedOrigins
+        AllowHeaders: [authorization, content-type]
+        AllowMethods: [GET, POST, PUT, PATCH, OPTIONS]
+        MaxAge: 300
+
+  # API Gateway checks the Cognito token before the request reaches the cluster.
+  # Cognito access tokens carry client_id, and the authorizer matches it with the audience.
+  CognitoAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref HttpApi
+      Name: cognito-jwt
+      AuthorizerType: JWT
+      IdentitySource: ["$request.header.Authorization"]
+      JwtConfiguration:
+        Issuer: !ImportValue { "Fn::Sub": "${ProjectName}-UserPoolIssuer" }
+        Audience:
+          - !ImportValue { "Fn::Sub": "${ProjectName}-UserPoolClientId" }
+
+  # One integration for all routes. ingress-nginx decides which service gets the request.
+  NlbIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+      IntegrationUri: !Ref NlbListenerArn
+      ConnectionType: VPC_LINK
+      ConnectionId: !Ref VpcLink
+      PayloadFormatVersion: "1.0"
+
+  # ---------- Public routes (no login needed to browse) ----------
+  RouteListAttractions:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /api/attractions
+      Target: !Sub integrations/${NlbIntegration}
+  RouteGetAttraction:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /api/attractions/{id}
+      Target: !Sub integrations/${NlbIntegration}
+  RouteListTiers:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /api/tiers
+      Target: !Sub integrations/${NlbIntegration}
+  RouteGetTier:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /api/tiers/{id}
+      Target: !Sub integrations/${NlbIntegration}
+  RouteTimeSlots:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /api/time-slots
+      Target: !Sub integrations/${NlbIntegration}
+
+  # ---------- Everything else needs a valid Cognito token ----------
+  RouteProtected:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: ANY /api/{proxy+}
+      AuthorizationType: JWT
+      AuthorizerId: !Ref CognitoAuthorizer
+      Target: !Sub integrations/${NlbIntegration}
+
+  ApiAccessLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+
+  # Auto deploy stage with throttling. Protects the cluster from too many requests.
+  DefaultStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: $default
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 200
+        ThrottlingRateLimit: 100
+      AccessLogSettings:
+        DestinationArn: !GetAtt ApiAccessLogs.Arn
+        Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","method":"$context.httpMethod","path":"$context.path","status":"$context.status","latency":"$context.responseLatency","authError":"$context.authorizer.error"}'
+
+Outputs:
+  ApiUrl:
+    Description: Base URL for the frontend (VITE_API_BASE_URL)
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+    Export:
+      Name: !Sub ${ProjectName}-ApiUrl

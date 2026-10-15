@@ -1,0 +1,111 @@
+# One Job per service. Creates the tables and seed data in RDS.
+# backoffLimit 6: if db-bootstrap is not finished yet, the Job tries again.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: attraction-migrate
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsUser: 33
+      containers:
+        - name: migrate
+          image: wonderland/attraction-service
+          command: ["php", "artisan", "migrate", "--force", "--seed"]
+          envFrom:
+            - configMapRef: { name: wonderland-config }
+            - secretRef: { name: wonderland-app-secrets }
+            - secretRef: { name: attraction-db-secret }
+          env:
+            - { name: DB_DATABASE, value: attraction_db }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pricing-migrate
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsUser: 33
+      containers:
+        - name: migrate
+          image: wonderland/pricing-service
+          command: ["php", "artisan", "migrate", "--force", "--seed"]
+          envFrom:
+            - configMapRef: { name: wonderland-config }
+            - secretRef: { name: wonderland-app-secrets }
+            - secretRef: { name: pricing-db-secret }
+          env:
+            - { name: DB_DATABASE, value: pricing_db }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: booking-migrate
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsUser: 33
+      containers:
+        - name: migrate
+          image: wonderland/booking-service
+          command: ["php", "artisan", "migrate", "--force", "--seed"]
+          envFrom:
+            - configMapRef: { name: wonderland-config }
+            - secretRef: { name: wonderland-app-secrets }
+            - secretRef: { name: booking-db-secret }
+          env:
+            - { name: DB_DATABASE, value: booking_db }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: payment-migrate
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsUser: 33
+      containers:
+        - name: migrate
+          image: wonderland/payment-service
+          command: ["php", "artisan", "migrate", "--force", "--seed"]
+          envFrom:
+            - configMapRef: { name: wonderland-config }
+            - secretRef: { name: wonderland-app-secrets }
+            - secretRef: { name: payment-db-secret }
+          env:
+            - { name: DB_DATABASE, value: payment_db }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: event-migrate
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsUser: 33
+      containers:
+        - name: migrate
+          image: wonderland/event-service
+          command: ["php", "artisan", "migrate", "--force", "--seed"]
+          envFrom:
+            - configMapRef: { name: wonderland-config }
+            - secretRef: { name: wonderland-app-secrets }
+            - secretRef: { name: event-db-secret }
+          env:
+            - { name: DB_DATABASE, value: event_db }
