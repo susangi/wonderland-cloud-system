@@ -1,0 +1,88 @@
+# CI: runs on every pull request to main.
+# Tests and builds only the services that changed, so the pipeline stays fast.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Find which parts of the repo changed in this pull request.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.services.outputs.changes }}
+      frontend: ${{ steps.frontend.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: services
+        uses: dorny/paths-filter@v3
+        with:
+          # If this workflow file changes, test everything.
+          filters: |
+            attraction-service:
+              - 'services/attraction-service/**'
+              - '.github/workflows/ci.yml'
+            pricing-service:
+              - 'services/pricing-service/**'
+              - '.github/workflows/ci.yml'
+            booking-service:
+              - 'services/booking-service/**'
+              - '.github/workflows/ci.yml'
+            payment-service:
+              - 'services/payment-service/**'
+              - '.github/workflows/ci.yml'
+            event-service:
+              - 'services/event-service/**'
+              - '.github/workflows/ci.yml'
+      - id: frontend
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
+
+  # One job per changed service (matrix). Tests use SQLite in memory, so no MySQL is needed.
+  test-service:
+    needs: changes
+    if: needs.changes.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: pdo_mysql, pdo_sqlite
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Prepare env
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+      - name: Run tests
+        run: php artisan test
+      - name: Check the Docker image builds
+        run: docker build -t wonderland/${{ matrix.service }}:ci .
+
+  build-frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run build
