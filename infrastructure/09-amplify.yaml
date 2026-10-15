@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Wonderland stack 9 - AWS Amplify Hosting for the React frontend.
+  Builds the frontend folder from the GitHub main branch on every push.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: wonderland
+  GitHubRepoUrl:
+    Type: String
+    Default: https://github.com/susangi/wonderland-cloud-system
+  GitHubToken:
+    Type: String
+    NoEcho: true
+    Description: GitHub personal access token so Amplify can read the repo. Never committed.
+
+Resources:
+  AmplifyApp:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: !Sub ${ProjectName}-frontend
+      Repository: !Ref GitHubRepoUrl
+      AccessToken: !Ref GitHubToken
+      Platform: WEB
+      # The repo has many folders, so we tell Amplify the app is inside "frontend".
+      BuildSpec: |
+        version: 1
+        applications:
+          - appRoot: frontend
+            frontend:
+              phases:
+                preBuild:
+                  commands:
+                    - nvm install 22
+                    - nvm use 22
+                    - npm ci
+                build:
+                  commands:
+                    - npm run build
+              artifacts:
+                baseDirectory: dist
+                files:
+                  - '**/*'
+              cache:
+                paths:
+                  - node_modules/**/*
+      # Vite reads these at build time. Values come from the other stacks.
+      EnvironmentVariables:
+        - Name: AMPLIFY_MONOREPO_APP_ROOT
+          Value: frontend
+        - Name: VITE_API_BASE_URL
+          Value: !ImportValue { "Fn::Sub": "${ProjectName}-ApiUrl" }
+        - Name: VITE_AUTH_MODE
+          Value: cognito
+        - Name: VITE_AWS_REGION
+          Value: !Ref AWS::Region
+        - Name: VITE_USER_POOL_ID
+          Value: !ImportValue { "Fn::Sub": "${ProjectName}-UserPoolId" }
+        - Name: VITE_USER_POOL_CLIENT_ID
+          Value: !ImportValue { "Fn::Sub": "${ProjectName}-UserPoolClientId" }
+        - Name: VITE_METABASE_URL
+          Value: http://localhost:3000
+      # Single page app: every page path loads index.html and React Router shows the right page.
+      CustomRules:
+        - Source: "</^[^.]+$|\\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json)$)([^.]+$)/>"
+          Target: /index.html
+          Status: "200"
+
+  # Auto build: every push to main builds and deploys the frontend again.
+  MainBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt AmplifyApp.AppId
+      BranchName: main
+      EnableAutoBuild: true
+      Stage: PRODUCTION
+
+Outputs:
+  AmplifyAppId:
+    Value: !GetAtt AmplifyApp.AppId
+  AmplifyUrl:
+    Description: Public URL of the frontend. Add this to the API CORS origins (stack 8).
+    Value: !Sub https://main.${AmplifyApp.DefaultDomain}
