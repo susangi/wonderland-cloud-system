@@ -1,0 +1,8 @@
+# Helm values for ingress-nginx. Creates an INTERNAL Network Load Balancer.
+# It is private, so only API Gateway (through the VPC Link) can reach it.
+controller:
+  replicaCount: 2
+  service:
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+      service.beta.kubernetes.io/aws-load-balancer-internal: "true"

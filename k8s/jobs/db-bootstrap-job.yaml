@@ -1,0 +1,62 @@
+# Runs once before the services. Uses the RDS master user to create one schema and one user per service.
+# Each service user can only touch its own schema (least privilege).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-bootstrap
+  namespace: wonderland
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: mysql-client
+          image: mysql:8.4
+          env:
+            - name: DB_HOST
+              valueFrom: { configMapKeyRef: { name: wonderland-config, key: DB_HOST } }
+            - { name: MASTER_USER, valueFrom: { secretKeyRef: { name: db-master-secret, key: MASTER_USERNAME } } }
+            - { name: MASTER_PASS, valueFrom: { secretKeyRef: { name: db-master-secret, key: MASTER_PASSWORD } } }
+            - { name: ATTRACTION_USER, valueFrom: { secretKeyRef: { name: attraction-db-secret, key: DB_USERNAME } } }
+            - { name: ATTRACTION_PASS, valueFrom: { secretKeyRef: { name: attraction-db-secret, key: DB_PASSWORD } } }
+            - { name: PRICING_USER, valueFrom: { secretKeyRef: { name: pricing-db-secret, key: DB_USERNAME } } }
+            - { name: PRICING_PASS, valueFrom: { secretKeyRef: { name: pricing-db-secret, key: DB_PASSWORD } } }
+            - { name: BOOKING_USER, valueFrom: { secretKeyRef: { name: booking-db-secret, key: DB_USERNAME } } }
+            - { name: BOOKING_PASS, valueFrom: { secretKeyRef: { name: booking-db-secret, key: DB_PASSWORD } } }
+            - { name: PAYMENT_USER, valueFrom: { secretKeyRef: { name: payment-db-secret, key: DB_USERNAME } } }
+            - { name: PAYMENT_PASS, valueFrom: { secretKeyRef: { name: payment-db-secret, key: DB_PASSWORD } } }
+            - { name: EVENT_USER, valueFrom: { secretKeyRef: { name: event-db-secret, key: DB_USERNAME } } }
+            - { name: EVENT_PASS, valueFrom: { secretKeyRef: { name: event-db-secret, key: DB_PASSWORD } } }
+            - { name: METABASE_USER, valueFrom: { secretKeyRef: { name: metabase-db-secret, key: MB_DB_USER } } }
+            - { name: METABASE_PASS, valueFrom: { secretKeyRef: { name: metabase-db-secret, key: MB_DB_PASS } } }
+            - { name: READONLY_USER, valueFrom: { secretKeyRef: { name: metabase-ro-secret, key: DB_USERNAME } } }
+            - { name: READONLY_PASS, valueFrom: { secretKeyRef: { name: metabase-ro-secret, key: DB_PASSWORD } } }
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -e
+              run_sql() { mysql -h "$DB_HOST" -P 3306 -u "$MASTER_USER" -p"$MASTER_PASS" -e "$1"; }
+
+              # One schema and one user with full access to that schema only.
+              create_schema_and_user() {
+                run_sql "CREATE DATABASE IF NOT EXISTS \`$1\`;
+                         CREATE USER IF NOT EXISTS '$2'@'%' IDENTIFIED BY '$3';
+                         ALTER USER '$2'@'%' IDENTIFIED BY '$3';
+                         GRANT ALL PRIVILEGES ON \`$1\`.* TO '$2'@'%';"
+                echo "Ready: $1 for user $2"
+              }
+
+              create_schema_and_user attraction_db "$ATTRACTION_USER" "$ATTRACTION_PASS"
+              create_schema_and_user pricing_db    "$PRICING_USER"    "$PRICING_PASS"
+              create_schema_and_user booking_db    "$BOOKING_USER"    "$BOOKING_PASS"
+              create_schema_and_user payment_db    "$PAYMENT_USER"    "$PAYMENT_PASS"
+              create_schema_and_user event_db      "$EVENT_USER"      "$EVENT_PASS"
+              create_schema_and_user metabase_db   "$METABASE_USER"   "$METABASE_PASS"
+
+              # Read only user for Metabase dashboards. It can only SELECT.
+              run_sql "CREATE USER IF NOT EXISTS '$READONLY_USER'@'%' IDENTIFIED BY '$READONLY_PASS';
+                       ALTER USER '$READONLY_USER'@'%' IDENTIFIED BY '$READONLY_PASS';
+                       GRANT SELECT ON event_db.* TO '$READONLY_USER'@'%';
+                       GRANT SELECT ON booking_db.* TO '$READONLY_USER'@'%';"
+              echo "Database bootstrap finished."
