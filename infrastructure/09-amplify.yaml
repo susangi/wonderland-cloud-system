@@ -63,7 +63,7 @@ Resources:
           Value: http://localhost:3000
       # Single page app: every page path loads index.html and React Router shows the right page.
       CustomRules:
-        - Source: "</^[^.]+$|\\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json)$)([^.]+$)/>"
+        - Source: "</^[^.]+$|\\.(?!(css|gif|ico|jpg|jpeg|js|png|webp|txt|svg|woff|woff2|ttf|map|json)$)([^.]+$)/>"
           Target: /index.html
           Status: "200"
 

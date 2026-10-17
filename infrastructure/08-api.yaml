@@ -94,6 +94,15 @@ Resources:
       RouteKey: GET /api/time-slots
       Target: !Sub integrations/${NlbIntegration}
 
+  # Browsers send an OPTIONS "preflight" request without a token before POST and PUT calls.
+  # Without this route it matches ANY /api/{proxy+}, goes to the JWT authorizer and fails with 401.
+  RoutePreflight:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: OPTIONS /api/{proxy+}
+      Target: !Sub integrations/${NlbIntegration}
+
   # ---------- Everything else needs a valid Cognito token ----------
   RouteProtected:
     Type: AWS::ApiGatewayV2::Route
