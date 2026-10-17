@@ -11,7 +11,8 @@ Parameters:
     Description: Use a version in standard support (extended support costs extra per hour)
   NodeInstanceType:
     Type: String
-    Default: t3.medium
+    # Same size as t3.medium (2 vCPU, 4 GiB). t3.medium is not allowed on this Free Tier account.
+    Default: c7i-flex.large
 
 Resources:
   # ---------- IAM role for the control plane ----------
