@@ -24,6 +24,10 @@ spec:
             - { name: MB_DB_PORT, value: "3306" }
             - name: MB_DB_HOST
               valueFrom: { configMapKeyRef: { name: wonderland-config, key: DB_HOST } }
+            # MySQL 8.4 uses caching_sha2_password. Without TLS the driver must fetch the server public key.
+            # User and password still come from MB_DB_USER and MB_DB_PASS (the secret).
+            - name: MB_DB_CONNECTION_URI
+              value: "mysql://$(MB_DB_HOST):3306/metabase_db?allowPublicKeyRetrieval=true"
             - { name: JAVA_OPTS, value: "-Xmx1g" }
           envFrom:
             - secretRef: { name: metabase-db-secret }   # MB_DB_USER, MB_DB_PASS
