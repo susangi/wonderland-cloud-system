@@ -1,0 +1,68 @@
+# CD: runs when code is merged to main, or by hand from the Actions tab.
+# Images are built in GitHub, pushed to ECR and rolled out on EKS.
+# AWS login uses OIDC, so no AWS keys are saved in GitHub.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # lets the job get an OIDC token for AWS
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  EKS_CLUSTER_NAME: wonderland-eks
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [attraction-service, pricing-service, booking-service, payment-service, event-service]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      # Tag = short git commit id, so we always know which commit is running.
+      - name: Build and push image
+        run: |
+          IMAGE=${{ steps.ecr.outputs.registry }}/wonderland/${{ matrix.service }}:${GITHUB_SHA::7}
+          docker build -t "$IMAGE" services/${{ matrix.service }}
+          docker push "$IMAGE"
+
+  deploy:
+    needs: build-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      # The cluster is destroyed when not in use to save cost. Then we only push images.
+      - name: Roll out new images on EKS
+        run: |
+          if ! aws eks describe-cluster --name "$EKS_CLUSTER_NAME" > /dev/null 2>&1; then
+            echo "Cluster not running - images pushed, deploy skipped"; exit 0
+          fi
+          aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+          if ! kubectl get deployment booking-service -n wonderland > /dev/null 2>&1; then
+            echo "App not installed on the cluster yet - deploy skipped"; exit 0
+          fi
+          TAG=${GITHUB_SHA::7}
+          REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_REGION.amazonaws.com
+          for s in attraction pricing booking payment event; do
+            kubectl set image deployment/$s-service "*=$REGISTRY/wonderland/$s-service:$TAG" -n wonderland
+          done
+          kubectl set image cronjob/booking-outbox-flush   "*=$REGISTRY/wonderland/booking-service:$TAG" -n wonderland
+          kubectl set image cronjob/booking-expire-pending "*=$REGISTRY/wonderland/booking-service:$TAG" -n wonderland
+          for s in attraction pricing booking payment event; do
+            kubectl rollout status deployment/$s-service -n wonderland --timeout=180s
+          done
