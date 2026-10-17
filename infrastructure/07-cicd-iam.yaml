@@ -43,7 +43,13 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOwner}/${GitHubRepo}:ref:refs/heads/main
+              # GitHub can send the subject in two formats. The new one adds the owner and repo IDs,
+              # for example repo:susangi@123/wonderland-cloud-system@456:ref:refs/heads/main.
+              # Both formats allow only the main branch of our repository.
+              StringLike:
+                token.actions.githubusercontent.com:sub:
+                  - !Sub repo:${GitHubOwner}/${GitHubRepo}:ref:refs/heads/main
+                  - !Sub repo:${GitHubOwner}@*/${GitHubRepo}@*:ref:refs/heads/main
       Policies:
         - PolicyName: wonderland-ci-deploy
           PolicyDocument:
