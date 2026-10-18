@@ -243,3 +243,5 @@ If the ECR stack fails to delete, delete the images in the repositories and try 
 - Deploy and destroy scripts to automate the manual cloud steps
 - Pod log collection to CloudWatch
 - Cluster Autoscaler and a cloud load test
+
+
