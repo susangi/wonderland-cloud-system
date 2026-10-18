@@ -238,8 +238,10 @@ foreach ($s in "wonderland-frontend","wonderland-api","wonderland-cicd","wonderl
 
 If the ECR stack fails to delete, delete the images in the repositories and try again. Finally, check that no NLB, NAT gateway or EBS volume is left.
 
-## Future work
+## Future works
 
 - Deploy and destroy scripts to automate the manual cloud steps
 - Pod log collection to CloudWatch
 - Cluster Autoscaler and a cloud load test
+
+
