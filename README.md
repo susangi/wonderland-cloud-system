@@ -70,29 +70,85 @@ To reset the local database completely: `docker compose down -v`, then `scripts\
 ## Cloud deployment (manual runbook)
 
 The cloud setup was run manually from PowerShell. There are no cloud deploy scripts yet.
-Use placeholders below and replace them with values from the deployed stacks or Secrets
-Manager. Do not save secret values in this repository.
+The commands use placeholders (`<LIKE_THIS>`). Replace them with values from the stack
+outputs or Secrets Manager. Never save secret values in this repository.
 
-The repository does not keep the exact PowerShell history. The commands below show the
-confirmed manual steps using the template parameters and resource names.
-**TO CONFIRM:** exact command options that are not fixed by the files.
+### How a request travels (the target architecture)
 
-### 1. Prerequisites
+```mermaid
+flowchart LR
+    U[Browser] --> A[Amplify<br/>React frontend]
+    A -->|JWT from Cognito| G[API Gateway<br/>HTTP API]
+    C[Cognito<br/>user pool] -.issues JWT.-> A
+    G -->|JWT authorizer| C
+    G -->|VPC Link| N[Internal NLB]
+    N --> I[ingress-nginx<br/>on EKS]
+    I --> S[5 Laravel services<br/>pods on EKS]
+    S --> R[(RDS MySQL<br/>one schema per service)]
+    M[Metabase on EKS] --> R
+```
+
+### Deployment flow at a glance
+
+The order matters because every phase uses something the earlier phase created.
+
+```mermaid
+flowchart TD
+    P0[Phase 0<br/>Prerequisites and budget] --> P1[Phase 1<br/>AWS foundation<br/>stacks 01 to 07]
+    P1 --> P2[Phase 2<br/>Prepare EKS<br/>kubectl + ingress-nginx]
+    P2 --> P3[Phase 3<br/>Deploy the apps<br/>secrets, manifests, DB jobs]
+    P3 --> P4[Phase 4<br/>Open to users<br/>stack 08 API, stack 09 Amplify]
+    P4 --> P5[Phase 5<br/>Verify<br/>pods, API, Metabase]
+    P5 --> P6[Phase 6<br/>Tear down]
+```
+
+| Phase | Steps | What it gives us | Why it comes here |
+|---|---|---|---|
+| 0. Before you start | 1 | Tools, region, budget alert | Cost control before anything is created |
+| 1. AWS foundation | 2 | VPC, security, ECR, RDS, EKS, Cognito, CI/CD role | Everything else runs inside these |
+| 2. Prepare EKS | 3 – 4 | kubectl access, ingress-nginx and its internal NLB | The NLB is needed later by API Gateway |
+| 3. Deploy the apps | 5 – 7 | Secrets, rendered manifests, schemas, migrations, running pods | The apps need the DB and secrets first |
+| 4. Open to users | 8 – 9 | API Gateway (stack 08) and Amplify (stack 09), CORS | Needs the NLB listener and the Amplify URL |
+| 5. Verify | 10 – 11 | Evidence that pods, API, auth and Metabase work | Proves the deployment |
+| 6. Tear down | 12 | All paid resources removed | AWS costs money while running |
+
+### CloudFormation stacks
+
+| # | Stack name | Template | Creates |
+|---|---|---|---|
+| 01 | `wonderland-network` | `01-network.yaml` | VPC, public and private subnets in two AZs, one NAT gateway |
+| 02 | `wonderland-security` | `02-security.yaml` | Security groups and generated secrets |
+| 03 | `wonderland-ecr` | `03-ecr.yaml` | Private ECR repositories for the five service images |
+| 04 | `wonderland-database` | `04-database.yaml` | RDS MySQL 8.4 in private subnets |
+| 05 | `wonderland-eks` | `05-eks.yaml` | EKS cluster, managed node group, core add-ons |
+| 06 | `wonderland-cognito` | `06-cognito.yaml` | Cognito user pool, web app client, `admins` group |
+| 07 | `wonderland-cicd` | `07-cicd-iam.yaml` | OIDC role so GitHub Actions can push to ECR and update EKS |
+| 08 | `wonderland-api` | `08-api.yaml` | API Gateway HTTP API, Cognito JWT authorizer, VPC Link to the NLB |
+| 09 | `wonderland-frontend` | `09-amplify.yaml` | Amplify Hosting for the React frontend |
+
+---
+
+### Phase 0 – Before you start
+
+#### Step 1. Prerequisites
 
 Install AWS CLI, kubectl, Helm and PowerShell. Configure AWS CLI access for `ap-south-1`.
-Before starting, check that the AWS Budget alert is active. The project used the
-`wonderland-monthly` USD 30 budget with alerts at 85%, 100% and forecast.
+Check that the AWS Budget alert is active. The project used the `wonderland-monthly`
+USD 30 budget with alerts at 85%, 100% and forecast.
 
 ```powershell
 $Region = "ap-south-1"
 $Project = "wonderland"
 ```
 
-### 2. Deploy stacks 01 to 07
+---
 
-Deploy one stack at a time in this order. The stack names below follow the names in
-`docs/03-deployment.md`. The CloudFormation templates do not set stack names.
-**TO CONFIRM:** these are the exact stack names entered during the manual deployment.
+### Phase 1 – Build the AWS foundation
+
+#### Step 2. Deploy stacks 01 to 07
+
+Deploy one stack at a time, in this order. Each stack reads outputs from the earlier ones
+(for example EKS and RDS use the subnets from stack 01).
 
 ```powershell
 aws cloudformation deploy --stack-name wonderland-network --template-file .\infrastructure\01-network.yaml --region $Region --parameter-overrides "ProjectName=$Project"
@@ -104,20 +160,25 @@ aws cloudformation deploy --stack-name wonderland-cognito --template-file .\infr
 aws cloudformation deploy --stack-name wonderland-cicd --template-file .\infrastructure\07-cicd-iam.yaml --region $Region --capabilities CAPABILITY_NAMED_IAM --parameter-overrides "GitHubOwner=<GITHUB_OWNER>" "GitHubRepo=<GITHUB_REPO>" "ClusterName=wonderland-eks"
 ```
 
-Replace the GitHub placeholders with the repository owner and repository name. The EKS
-cluster name and node type match the deployed values.
+Replace the GitHub placeholders with the repository owner and name. The EKS cluster name
+and node type match the deployed values.
 
-### 3. Connect kubectl to EKS
+**Result:** the network, database, cluster, user pool and CI/CD role exist.
+
+---
+
+### Phase 2 – Prepare the EKS cluster
+
+#### Step 3. Connect kubectl to EKS
 
 ```powershell
 aws eks update-kubeconfig --name wonderland-eks --region $Region
 ```
 
-### 4. Install ingress-nginx
+#### Step 4. Install ingress-nginx
 
-The values file configures two controller replicas and an internal Network Load Balancer.
-The chart version was not pinned in the repository.
-**TO CONFIRM:** the exact Helm chart version used.
+The values file sets two controller replicas and an **internal** Network Load Balancer,
+so the services are not public. Only API Gateway reaches them (Phase 4).
 
 ```powershell
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
@@ -126,14 +187,20 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx --namespace ing
 kubectl get service ingress-nginx-controller --namespace ingress-nginx --watch
 ```
 
-Wait until the service shows the internal load balancer hostname. Use that hostname in
-step 8.
+Wait until the service shows the internal load balancer hostname. It is used in Step 8.
 
-### 5. Create the namespace and Kubernetes Secrets
+**Result:** kubectl works and the internal NLB exists.
 
-The values come from the generated Secrets Manager secrets and the RDS master secret.
-The table lists the secret names and keys referenced by the manifests. Do not put the
-values in YAML files or commit them.
+---
+
+### Phase 3 – Deploy the application on EKS
+
+#### Step 5. Create the namespace and Kubernetes Secrets
+
+The values come from the generated Secrets Manager secrets (stack 02) and the RDS master
+secret (stack 04 output `DbMasterSecretArn`). The database secrets hold `username` and
+`password` fields; map them to the Kubernetes keys below. Do not put the values in YAML
+files, commits, terminal transcripts or screenshots.
 
 | Kubernetes Secret | Keys expected by the manifests |
 |---|---|
@@ -147,9 +214,7 @@ values in YAML files or commit them.
 | `metabase-db-secret` | `MB_DB_USER`, `MB_DB_PASS` |
 | `metabase-ro-secret` | `DB_USERNAME`, `DB_PASSWORD` |
 
-Create the namespace and each secret with the same client dry run and apply method used
-during deployment. Replace each quoted placeholder with the matching value from Secrets
-Manager before running the command.
+The `--dry-run=client -o yaml | kubectl apply` pattern makes each command safe to run again.
 
 ```powershell
 kubectl create namespace wonderland --dry-run=client -o yaml | kubectl apply -f -
@@ -164,19 +229,13 @@ kubectl create secret generic metabase-db-secret -n wonderland --from-literal=MB
 kubectl create secret generic metabase-ro-secret -n wonderland --from-literal=DB_USERNAME='<METABASE_READONLY_USERNAME>' --from-literal=DB_PASSWORD='<METABASE_READONLY_PASSWORD>' --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-The CloudFormation secrets have generated names. Use the secret ARNs in the CloudFormation
-outputs to find them. The Kubernetes key names above are the names expected by the
-manifests. Stack 02 outputs the service, Metabase and application secret ARNs. Stack 04
-outputs `DbMasterSecretArn`. The database secrets contain `username` and `password`
-fields; map them to the Kubernetes keys shown above. The application key and internal
-token values are mapped to `APP_KEY` and `INTERNAL_TOKEN`. Do not paste actual values
-into a terminal transcript or screenshot.
+#### Step 6. Render the EKS manifests
 
-### 6. Render the EKS manifests
-
-The EKS overlay uses `__ECR_REGISTRY__`, `__IMAGE_TAG__` and `__DB_HOST__` tokens. Copy
-`k8s/` to `build/k8s/` and replace these tokens in the copied files only. The image tag
-used by CI and CD is the short commit SHA.
+The EKS overlay has three tokens: `__ECR_REGISTRY__`, `__IMAGE_TAG__` and `__DB_HOST__`.
+Copy `k8s/` to `build/k8s/` and replace the tokens in the copy only, so the committed
+manifests stay generic. The image tag is the short commit SHA, the same tag the Deploy
+workflow (`.github/workflows/deploy.yml`) pushes to ECR. The images for that commit must
+already be in ECR.
 
 ```powershell
 New-Item -ItemType Directory -Force -Path .\build | Out-Null
@@ -193,12 +252,10 @@ Get-ChildItem .\build\k8s -Recurse -File | ForEach-Object {
 }
 ```
 
-The images for the selected commit must already be in ECR.
+#### Step 7. Set up the database and apply the EKS overlay
 
-### 7. Run database setup and apply the EKS overlay
-
-Apply the bootstrap Job first. It creates the service schemas and database users. Then
-apply the EKS overlay, which includes one migration Job per service.
+1. The **bootstrap Job** creates the five service schemas and their database users.
+2. The **EKS overlay** deploys the services, Metabase and one **migration Job** per service.
 
 ```powershell
 kubectl apply -f .\build\k8s\jobs\db-bootstrap-job.yaml
@@ -212,14 +269,17 @@ kubectl wait --for=condition=complete job/event-migrate --namespace wonderland "
 kubectl get pods --namespace wonderland
 ```
 
-**TO CONFIRM:** choose a wait timeout long enough for the database and migrations. Check
-that all five migration Jobs completed and that the service pods are Running before
-continuing.
+**Result:** all five migration Jobs are complete and the service pods are Running.
 
-### 8. Get the NLB listener ARN and deploy stack 08
+---
 
-Read the load balancer hostname from the ingress service. Use it to find the NLB ARN
-and its port 80 listener ARN.
+### Phase 4 – Open the system to users
+
+#### Step 8. Deploy stack 08 (API Gateway)
+
+API Gateway connects to the internal NLB through a VPC Link, so it needs the NLB's port 80
+listener ARN. Find it from the ingress hostname. At first only the local frontend origin is
+allowed, because the Amplify URL does not exist yet.
 
 ```powershell
 $NlbDns = kubectl get service ingress-nginx-controller --namespace ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
@@ -228,10 +288,10 @@ $ListenerArn = aws elbv2 describe-listeners --load-balancer-arn $NlbArn --region
 aws cloudformation deploy --stack-name wonderland-api --template-file .\infrastructure\08-api.yaml --region $Region --parameter-overrides "ProjectName=$Project" "NlbListenerArn=$ListenerArn" "AllowedOrigins=http://localhost:5173"
 ```
 
-### 9. Deploy Amplify and update API CORS
+#### Step 9. Deploy stack 09 (Amplify) and update API CORS
 
-Stack 09 needs a GitHub token so Amplify can read the repository. Use a token with the
-required repository access. Do not put the token in this file or a committed file.
+Stack 09 needs a GitHub token so Amplify can read the repository. Never put the token in
+a committed file. After Amplify gives its URL, update stack 08 again to allow it in CORS.
 
 ```powershell
 aws cloudformation deploy --stack-name wonderland-frontend --template-file .\infrastructure\09-amplify.yaml --region $Region --parameter-overrides "ProjectName=$Project" "GitHubRepoUrl=<GITHUB_REPO_URL>" "GitHubToken=<GITHUB_TOKEN>"
@@ -239,10 +299,13 @@ $AmplifyUrl = aws cloudformation describe-stacks --stack-name wonderland-fronten
 aws cloudformation deploy --stack-name wonderland-api --template-file .\infrastructure\08-api.yaml --region $Region --parameter-overrides "ProjectName=$Project" "NlbListenerArn=$ListenerArn" "AllowedOrigins=http://localhost:5173,$AmplifyUrl"
 ```
 
-After the API stack update, the browser CORS preflight returned 204 for the configured
-origins.
+**Result:** the browser CORS preflight returned 204 for the configured origins.
 
-### 10. Verify Kubernetes and API access
+---
+
+### Phase 5 – Verify
+
+#### Step 10. Check Kubernetes and the API
 
 ```powershell
 kubectl get pods,hpa,pdb,cronjobs,ingress --namespace wonderland
@@ -251,24 +314,32 @@ curl.exe -i "$ApiUrl/api/attractions"
 curl.exe -i "$ApiUrl/api/bookings/me"
 ```
 
-The API checks returned 200 with attraction data and 401 for `/api/bookings/me` without
-a token.
+| Check | Expected | Shows that |
+|---|---|---|
+| `GET /api/attractions` | `200` with attraction data | Public route works end to end (API Gateway → NLB → ingress → pod → RDS) |
+| `GET /api/bookings/me` without a token | `401` | The Cognito JWT authorizer protects private routes |
 
-### 11. Open Metabase
+#### Step 11. Open Metabase
 
-Metabase is a ClusterIP service. Run port-forward in a separate PowerShell window then
-open `http://localhost:8088`. Windows reserves some ports near 3000 so the local port
-8088 was used.
+Metabase is a ClusterIP service (not public). Run port-forward in a separate PowerShell
+window, then open `http://localhost:8088`. Port 8088 is used because Windows reserves some
+ports near 3000.
 
 ```powershell
 kubectl port-forward --namespace wonderland service/metabase 8088:3000
 ```
 
-### 12. Tear down
+---
 
-Remove ingress-nginx first and wait for its internal NLB to be deleted. Then delete the
-stacks in this order. Wait for each stack to finish deleting before starting the next.
-Keep stack 06 (`wonderland-cognito`).
+### Phase 6 – Tear down
+
+#### Step 12. Remove the paid resources
+
+1. Uninstall ingress-nginx first and wait until its internal NLB is deleted. (The NLB was
+   created by Kubernetes, not CloudFormation, so it can block the VPC deletion.)
+2. Delete the stacks in **reverse order**, waiting for each one to finish.
+3. Keep stack 06 (`wonderland-cognito`) so the users stay. Delete it separately when it is
+   no longer needed.
 
 ```powershell
 helm uninstall ingress-nginx --namespace ingress-nginx
@@ -290,8 +361,18 @@ aws cloudformation delete-stack --stack-name wonderland-network --region $Region
 aws cloudformation wait stack-delete-complete --stack-name wonderland-network --region $Region
 ```
 
-If deleting stack 03 fails because an ECR repository is not empty, remove its images in
-ECR and retry the stack deletion. Check that no project NLB, NAT gateway or EBS volume
-remains. Stack 06 is kept and can be deleted separately when it is no longer needed.
+If stack 03 fails to delete because an ECR repository is not empty, delete its images and
+retry. Finally check that no project NLB, NAT gateway or EBS volume remains.
 
-These steps are manual. Deploy scripts are future work.
+---
+
+### Open items (to confirm)
+
+The repository does not keep the exact PowerShell history, so these details are not
+fixed by the files:
+
+- The exact stack names typed during the manual deployment (the names above follow `docs/03-deployment.md`; the templates do not set stack names).
+- The ingress-nginx Helm chart version (not pinned in the repository).
+- The `kubectl wait` timeout used for the bootstrap and migration Jobs.
+
+Deploy scripts that automate these steps are future work.
