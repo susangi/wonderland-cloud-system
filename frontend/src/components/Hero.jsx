@@ -13,7 +13,7 @@ export default function Hero() {
         <circle cx="150" cy="250" r="90" style={{ fill: 'var(--coral-500)' }} />
         <circle cx="330" cy="320" r="48" style={{ fill: 'var(--amber-400)' }} />
       </svg>
-      <h1>A day you&apos;ll talk about for years</h1>
+      <h1>A day you&apos;ll remember for years</h1>
       <p>
         Coasters, water rides, kids&apos; favourites and games for everyone — book your time slot online and skip the
         ticket queue.
